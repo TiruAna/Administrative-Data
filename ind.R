@@ -379,7 +379,7 @@ calculeazaMetodaComparatie = function(sursa_an_curent, sursa_an_precedent){
   luna = c("ianuarie", "februarie", "martie", "aprilie", "mai", "iunie", "iulie",
            "august", "septembrie", "octombrie", "noiembrie", "decembrie")
   procent = data.frame(luna, procent)
-  return(procent)
+  return(sursa_an_curent)
   
   # Scrierea fisierului cu marcarea erorilor in coloanele Metoda3_1:Metoda3_12
   # 1 - cifra de afaceri este aberanta
@@ -436,7 +436,7 @@ out <- function (sursa) {
   luna = c("ianuarie", "februarie", "martie", "aprilie", "mai", "iunie", "iulie",
            "august", "septembrie", "octombrie", "noiembrie", "decembrie")
   procent = data.frame(luna, procent)
-  return(procent)
+  return(sursa)
 }
 
 
@@ -493,22 +493,21 @@ mean_size_div <- function (sursa) {
   lv <- levels(sursa$div)
   cls <- 0
   div <- 0
-  m <- 0
-  lun <- 0
+  media <- 0
   for (i in 1:4) {
     for (j in lv) {
       l <- length(sursa[which(sursa$cls_marime == i & sursa$div == j), "ca_01"])
       if (l == 0) next
       med <- mean(sursa[which(sursa$cls_marime == i & sursa$div == j), "ca_01"], na.rm = TRUE)
-      rp <- rep(med,l)
-      m <- c(m, rp)
+      media  <- c(media, med)
+      div <- c(div, j)
+      cls <- c(cls, i)
     }
   }
-  return(m)
+  df <- data.frame(cls, div, media)
+  df <- df[-c(1),]
+  return(df)
 }
 
-m <- mean_size_div(sursa2018)
-mm <- mean_size_div(sursa2018)
-t <- mean_size_div(sursa2018)
-tt <- subset(t, t$cls_marime == 2 & t$div == "56")
+
 
