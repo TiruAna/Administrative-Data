@@ -415,6 +415,8 @@ out <- function (sursa) {
     out <- 0
     for (j in 1:4) {
       for (t in lv) {
+        l <- length(sursa[which(sursa$cls_marime == j & sursa$div == t), col3])
+        if (l == 0) next
         outliersDetection = boxB(sursa[which(sursa$cls_marime == j & sursa$div == t), col3], k = 20, method = "asymmetric")
         out <- c(out, outliersDetection$outliers)
       }
@@ -496,9 +498,9 @@ mean_size_div <- function (sursa) {
   media <- 0
   for (i in 1:4) {
     for (j in lv) {
-      l <- length(sursa[which(sursa$cls_marime == i & sursa$div == j), "ca_01"])
+      l <- length(sursa[which(sursa$cls_marime == i & sursa$div == j), "ca_03"])
       if (l == 0) next
-      med <- mean(sursa[which(sursa$cls_marime == i & sursa$div == j), "ca_01"], na.rm = TRUE)
+      med <- mean(sursa[which(sursa$cls_marime == i & sursa$div == j), "ca_03"], na.rm = TRUE)
       media  <- c(media, med)
       div <- c(div, j)
       cls <- c(cls, i)
@@ -510,4 +512,27 @@ mean_size_div <- function (sursa) {
 }
 
 
+# 1. Remove Errors
+error <- out(sursa2018)
+error <- subset(error, error$Metoda2_3!=1)
+error <- error[,c(1:179)]
+error <- calculeazaEroriUnitateDeMasura(error,sursa2017)
+error <- subset(error, error$Metoda0_3!=1)
+error <- error[,c(1:179)]
+error <- calculeazaMetodaComparatie(error,sursa2017)
+error <- subset(error, error$Metoda3_3!=1)
+error <- error[,c(1:179)]
 
+# 2. Train
+pos_train = sample(1:nrow(error), round(nrow(error)*0.1)) 
+train = error[-pos_train,]
+test = error[pos_train,]
+
+# 3. Media
+med <- mean_size_div(train)
+
+# 4.Pred
+test1 <- left_join(test, med, by = c("div"="div", "cls_marime" = "cls"))
+
+# Eval
+rie <- sum(abs(test1$media-test1$ca_03), na.rm = TRUE)/sum(test1$ca_03, na.rm = TRUE)
