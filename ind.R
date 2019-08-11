@@ -480,7 +480,7 @@ df$dif <- abs(df$pred-df$org)
 sum(df$dif)/sum(df$org)*100
 
 
-mean_size_div <- function (sursa) {
+mean_size_div <- function (sursa,met = "mean") {
   sursa <- clean(sursa)
   sursa <- remove_unit(sursa)
   sursa <- add_cls_marime(sursa)
@@ -496,15 +496,25 @@ mean_size_div <- function (sursa) {
   cls <- 0
   div <- 0
   media <- 0
+  ratio <- 0
   for (i in 1:4) {
     for (j in lv) {
       l <- length(sursa[which(sursa$cls_marime == i & sursa$div == j), "ca_03"])
       if (l == 0) next
-      med <- mean(sursa[which(sursa$cls_marime == i & sursa$div == j), "ca_03"], na.rm = TRUE)
+      if (met == "ratio") {
+        cur <- sum(sursa[which(sursa$cls_marime == i & sursa$div == j), "ca_03"], na.rm = TRUE)
+        prev <- sum(sursa[which(sursa$cls_marime == i & sursa$div == j), "ca_02"], na.rm = TRUE)
+        ratio <- c(ratio, cur/prev)
+      }
+      med <- median(sursa[which(sursa$cls_marime == i & sursa$div == j), "ca_03"], na.rm = TRUE)
       media  <- c(media, med)
       div <- c(div, j)
       cls <- c(cls, i)
     }
+  }
+  if (met == "ratio") {
+    df <- data.frame(cls, div, ratio)
+    return(df)
   }
   df <- data.frame(cls, div, media)
   df <- df[-c(1),]
@@ -536,3 +546,22 @@ test1 <- left_join(test, med, by = c("div"="div", "cls_marime" = "cls"))
 
 # Eval
 rie <- sum(abs(test1$media-test1$ca_03), na.rm = TRUE)/sum(test1$ca_03, na.rm = TRUE)
+
+
+# Boosting
+boosting = gbm(ca_03 ~ r7_t03 + r14_t03, data = train, 
+               n.trees=5000, 
+               interaction.depth=4)
+predictieBoosting = predict(boosting, newdata = test,
+                            n.trees =5000) 
+mseBoosting = sqrt(mean((predictieBoosting - test[,"ca_03"])^2))
+rie <- sum(abs(predictieBoosting-test$ca_03), na.rm = TRUE)/sum(test$ca_03, na.rm = TRUE)
+
+
+rat = mean_size_div(sursa2018, met = "ratio")
+rat = rat[-c(1),]
+
+rat <- mean_size_div(train, met = "ratio")
+test1 <- left_join(test, rat, by = c("div"="div", "cls_marime" = "cls"))
+test1$ratio <- test1$ca_02*test1$ratio
+rie <- sum(abs(test1$ratio-test1$ca_03), na.rm = TRUE)/sum(test1$ca_03, na.rm = TRUE)
