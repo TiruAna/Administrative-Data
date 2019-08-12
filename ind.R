@@ -1,6 +1,7 @@
 library(foreign)
 library(dplyr)
 library(univOutl)
+library(gbm)
 
 setwd("D:/ANA_MARIA/Task13_SURSE_NOU/SURSE/Ind_calitate")
 sursa2015 <- read.dbf("SURSA_2015.DBF")
@@ -506,20 +507,44 @@ mean_size_div <- function (sursa,met = "mean") {
         prev <- sum(sursa[which(sursa$cls_marime == i & sursa$div == j), "ca_02"], na.rm = TRUE)
         ratio <- c(ratio, cur/prev)
       }
+      if (met == "ratio1") {
+        cur <- sum(sursa[which(sursa$cls_marime == i & sursa$div == j), "ca_03"], na.rm = TRUE)
+        prev <- sum(year[which(year$cls_marime == i & year$div == j), "ca_03"], na.rm = TRUE)
+        ratio <- c(ratio, cur/prev)
+      }
       med <- median(sursa[which(sursa$cls_marime == i & sursa$div == j), "ca_03"], na.rm = TRUE)
       media  <- c(media, med)
       div <- c(div, j)
       cls <- c(cls, i)
     }
   }
-  if (met == "ratio") {
+  if (met == "ratio" | met == "ratio1") {
     df <- data.frame(cls, div, ratio)
+    df <- df[-c(1),]
     return(df)
   }
   df <- data.frame(cls, div, media)
   df <- df[-c(1),]
   return(df)
 }
+
+
+clean <- function (sursa) {
+  sursa <- clean(sursa)
+  sursa <- remove_unit(sursa)
+  sursa <- add_cls_marime(sursa)
+  sursa <- subset(sursa, !is.na(sursa$t_r1) & !is.na(sursa$t_r2) & !is.na(sursa$t_r3) & 
+                    !is.na(sursa$t_r4) & !is.na(sursa$t_r5) & !is.na(sursa$t_r6) & 
+                    !is.na(sursa$t_r7) & !is.na(sursa$t_r8) & !is.na(sursa$t_r9) & 
+                    !is.na(sursa$t_r10) & !is.na(sursa$t_r11) & !is.na(sursa$t_r12))
+  sursa <- add_div_caen(sursa)
+  sursa <- subset(sursa, !is.na(sursa$div))
+  sursa <- subset(sursa, !is.na(sursa$cls_marime))
+  sursa$div <- as.factor(sursa$div)
+  return (sursa)
+}
+
+
 
 
 # 1. Remove Errors
@@ -533,35 +558,79 @@ error <- calculeazaMetodaComparatie(error,sursa2017)
 error <- subset(error, error$Metoda3_3!=1)
 error <- error[,c(1:179)]
 
-# 2. Train
+t = Sys.time()
+v <- 0
+for (i in 1:200) {
+  # 2. Train
+  pos_train = sample(1:nrow(error), round(nrow(error)*0.1)) 
+  train = error[-pos_train,]
+  test = error[pos_train,]
+  
+  # 3. Media
+  med <- mean_size_div(train)
+  
+  # 4.Pred
+  test1 <- left_join(test, med, by = c("div"="div", "cls_marime" = "cls"))
+  
+  # Eval
+  rie <- sum(abs(test1$media-test1$ca_03), na.rm = TRUE)/sum(test1$ca_03, na.rm = TRUE)
+  v <- c(v,rie)
+}
+
+Sys.time() - t
+
+
+
+# Ratio
+t = Sys.time()
+vr <- 0
+for (i in 1:200) {
+  # 2. Train
+  pos_train = sample(1:nrow(error), round(nrow(error)*0.1)) 
+  train = error[-pos_train,]
+  test = error[pos_train,]
+  rat <- mean_size_div(train, met = "ratio")
+  test1 <- left_join(test, rat, by = c("div"="div", "cls_marime" = "cls"))
+  test1$ratio <- test1$ca_02*test1$ratio
+  rie <- sum(abs(test1$ratio-test1$ca_03), na.rm = TRUE)/sum(test1$ca_03, na.rm = TRUE)
+  vr <- c(vr, rie)
+}
+Sys.time() - t
+
+
+
+
 pos_train = sample(1:nrow(error), round(nrow(error)*0.1)) 
 train = error[-pos_train,]
 test = error[pos_train,]
-
-# 3. Media
-med <- mean_size_div(train)
-
-# 4.Pred
-test1 <- left_join(test, med, by = c("div"="div", "cls_marime" = "cls"))
-
-# Eval
-rie <- sum(abs(test1$media-test1$ca_03), na.rm = TRUE)/sum(test1$ca_03, na.rm = TRUE)
-
-
-# Boosting
-boosting = gbm(ca_03 ~ r7_t03 + r14_t03, data = train, 
-               n.trees=5000, 
-               interaction.depth=4)
-predictieBoosting = predict(boosting, newdata = test,
-                            n.trees =5000) 
-mseBoosting = sqrt(mean((predictieBoosting - test[,"ca_03"])^2))
-rie <- sum(abs(predictieBoosting-test$ca_03), na.rm = TRUE)/sum(test$ca_03, na.rm = TRUE)
-
-
-rat = mean_size_div(sursa2018, met = "ratio")
-rat = rat[-c(1),]
-
 rat <- mean_size_div(train, met = "ratio")
 test1 <- left_join(test, rat, by = c("div"="div", "cls_marime" = "cls"))
 test1$ratio <- test1$ca_02*test1$ratio
 rie <- sum(abs(test1$ratio-test1$ca_03), na.rm = TRUE)/sum(test1$ca_03, na.rm = TRUE)
+
+
+
+
+
+
+
+
+# Boosting
+t = Sys.time()
+mse <- 0
+r <- 0
+for (i in 1:2) {
+  pos_train = sample(1:nrow(error), round(nrow(error)*0.1)) 
+  train = error[-pos_train,]
+  test = error[pos_train,]
+  boosting = gbm(ca_03 ~ r7_t03 + r14_t03, data = train, 
+                 n.trees=5000, 
+                 interaction.depth=4)
+  predictieBoosting = predict(boosting, newdata = test,
+                              n.trees =5000) 
+  mseBoosting = sqrt(mean((predictieBoosting - test[,"ca_03"])^2))
+  mse <- c(mse, mseBoosting)
+  rie <- sum(abs(predictieBoosting-test$ca_03), na.rm = TRUE)/sum(test$ca_03, na.rm = TRUE)
+  r <- c(r, rie)
+}
+Sys.time() - t
