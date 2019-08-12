@@ -529,20 +529,6 @@ mean_size_div <- function (sursa,met = "mean") {
 }
 
 
-clean <- function (sursa) {
-  sursa <- clean(sursa)
-  sursa <- remove_unit(sursa)
-  sursa <- add_cls_marime(sursa)
-  sursa <- subset(sursa, !is.na(sursa$t_r1) & !is.na(sursa$t_r2) & !is.na(sursa$t_r3) & 
-                    !is.na(sursa$t_r4) & !is.na(sursa$t_r5) & !is.na(sursa$t_r6) & 
-                    !is.na(sursa$t_r7) & !is.na(sursa$t_r8) & !is.na(sursa$t_r9) & 
-                    !is.na(sursa$t_r10) & !is.na(sursa$t_r11) & !is.na(sursa$t_r12))
-  sursa <- add_div_caen(sursa)
-  sursa <- subset(sursa, !is.na(sursa$div))
-  sursa <- subset(sursa, !is.na(sursa$cls_marime))
-  sursa$div <- as.factor(sursa$div)
-  return (sursa)
-}
 
 
 
@@ -596,19 +582,6 @@ for (i in 1:200) {
   vr <- c(vr, rie)
 }
 Sys.time() - t
-
-
-
-
-pos_train = sample(1:nrow(error), round(nrow(error)*0.1)) 
-train = error[-pos_train,]
-test = error[pos_train,]
-rat <- mean_size_div(train, met = "ratio")
-test1 <- left_join(test, rat, by = c("div"="div", "cls_marime" = "cls"))
-test1$ratio <- test1$ca_02*test1$ratio
-rie <- sum(abs(test1$ratio-test1$ca_03), na.rm = TRUE)/sum(test1$ca_03, na.rm = TRUE)
-
-
 
 
 
