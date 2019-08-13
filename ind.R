@@ -3,6 +3,7 @@ library(dplyr)
 library(univOutl)
 library(gbm)
 library(randomForest)
+library(tree)
 
 setwd("D:/ANA_MARIA/Task13_SURSE_NOU/SURSE/Ind_calitate")
 sursa2015 <- read.dbf("SURSA_2015.DBF")
@@ -587,7 +588,7 @@ mseb <- 0
 msef <- 0
 rb <- 0
 rf <- 0
-for (i in 1:2) {
+for (i in 1:50) {
   error = subset(error, t_r3 == 1 & d_r3 == 1)
   pos_train = sample(1:nrow(error), round(nrow(error)*0.1))
   p <- c(1:length(pos_train))
@@ -696,17 +697,3 @@ error7 <- error7[,c(1:179)]
 rprev <- ratio_prev_year(error, error7)
 
 # Ratio
-t = Sys.time()
-vr <- 0
-for (i in 1:3) {
-  # 2. Train
-  pos_train = sample(1:nrow(error), round(nrow(error)*0.1)) 
-  train = error[-pos_train,]
-  test = error[pos_train,]
-  rat <- ratio_prev_year(train, error7)
-  test1 <- left_join(test, rat, by = c("div"="div", "cls_marime" = "cls"))
-  test1$ratio <- test1$ca_02*test1$ratio
-  rie <- sum(abs(test1$ratio-test1$ca_03), na.rm = TRUE)/sum(test1$ca_03, na.rm = TRUE)
-  vr <- c(vr, rie)
-}
-Sys.time() - t
