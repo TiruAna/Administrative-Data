@@ -2,6 +2,7 @@ library(foreign)
 library(dplyr)
 library(univOutl)
 library(gbm)
+library(randomForest)
 
 setwd("D:/ANA_MARIA/Task13_SURSE_NOU/SURSE/Ind_calitate")
 sursa2015 <- read.dbf("SURSA_2015.DBF")
@@ -455,32 +456,6 @@ write.dbf(s2018, "sursa_2015_met2.dbf")
 ############################################### # IMPUTARE ############################################################
 #######################################################################################################################
 
-# Boosting
-vatData <- s2018
-train = sample(1:nrow(vatData), round(0.1 * nrow(vatData))) #train set
-
-test = vatData[-train,] #test set
-
-# prezicem cifra de afaceri (turnover) in functie de 
-# venit si numarul mediu de angajati
-# toate 3 coloane: turnover, grossIncome, avgEmployeesNo se gasesc in vatData
-# aici antrenam modelul
-
-boosting = gbm(ca_01 ~ r7_t01 + r14_t01, data = vatData[train, ], 
-               n.trees=5000, 
-               interaction.depth=4)
-# aici facem predictia 
-predictieBoosting = predict(boosting, newdata = vatData[-train, ],
-                            n.trees =5000) 
-
-#root mean square error: eroarea facand comparatie cu datele reale
-mseBoosting = sqrt(mean((predictieBoosting - test[,"ca_01"])^2))
-
-df = data.frame(org=test[,"ca_01"], pred=predictieBoosting)
-df$dif <- abs(df$pred-df$org)
-sum(df$dif)/sum(df$org)*100
-
-
 mean_size_div <- function (sursa,met = "mean") {
   sursa <- clean(sursa)
   sursa <- remove_unit(sursa)
@@ -508,9 +483,11 @@ mean_size_div <- function (sursa,met = "mean") {
         ratio <- c(ratio, cur/prev)
       }
       if (met == "ratio1") {
-        cur <- sum(sursa[which(sursa$cls_marime == i & sursa$div == j), "ca_03"], na.rm = TRUE)
-        prev <- sum(year[which(year$cls_marime == i & year$div == j), "ca_03"], na.rm = TRUE)
-        ratio <- c(ratio, cur/prev)
+        rap <- sursa[which(sursa$cls_marime == i & sursa$div == j & sursa$ca_02 != 0), "ca_03"]/sursa[which(sursa$cls_marime == i & sursa$div == j & sursa$ca_02 != 0), "ca_02"]
+        len <- length(rap)
+        rap <- sum(rap, na.rm = TRUE)
+        rap <- rap/len
+        ratio <- c(ratio, rap)
       }
       med <- median(sursa[which(sursa$cls_marime == i & sursa$div == j), "ca_03"], na.rm = TRUE)
       media  <- c(media, med)
@@ -527,9 +504,6 @@ mean_size_div <- function (sursa,met = "mean") {
   df <- df[-c(1),]
   return(df)
 }
-
-
-
 
 
 
@@ -584,26 +558,82 @@ for (i in 1:200) {
 Sys.time() - t
 
 
+# Ratio1
+t = Sys.time()
+vr <- 0
+for (i in 1:10) {
+  # 2. Train
+  pos_train = sample(1:nrow(error), round(nrow(error)*0.1)) 
+  train = error[-pos_train,]
+  test = error[pos_train,]
+  rat <- mean_size_div(train, met = "ratio1")
+  test1 <- left_join(test, rat, by = c("div"="div", "cls_marime" = "cls"))
+  test1$ratio <- test1$ca_02*test1$ratio
+  rie <- sum(abs(test1$ratio-test1$ca_03), na.rm = TRUE)/sum(test1$ca_03, na.rm = TRUE)
+  vr <- c(vr, rie)
+}
+Sys.time() - t
 
 
+######################################## Eval Machine Learning Techniques #############################################
+#######################################################################################################################
 
 
 # Boosting
+# 10 -> 22 min
+# 100 -> 220 min
 t = Sys.time()
-mse <- 0
-r <- 0
+mseb <- 0
+msef <- 0
+rb <- 0
+rf <- 0
 for (i in 1:2) {
-  pos_train = sample(1:nrow(error), round(nrow(error)*0.1)) 
+  error = subset(error, t_r3 == 1 & d_r3 == 1)
+  pos_train = sample(1:nrow(error), round(nrow(error)*0.1))
+  p <- c(1:length(pos_train))
+  pos = p[which(!(p %in% pos_train))]
   train = error[-pos_train,]
   test = error[pos_train,]
   boosting = gbm(ca_03 ~ r7_t03 + r14_t03, data = train, 
                  n.trees=5000, 
                  interaction.depth=4)
+  regressionTree = tree(ca_03 ~ r7_t03 + r14_t03, error, subset=pos) 
   predictieBoosting = predict(boosting, newdata = test,
-                              n.trees =5000) 
+                              n.trees =5000)
+  predictieRegressionTree = predict(regressionTree, newdata = test)
+  
   mseBoosting = sqrt(mean((predictieBoosting - test[,"ca_03"])^2))
-  mse <- c(mse, mseBoosting)
-  rie <- sum(abs(predictieBoosting-test$ca_03), na.rm = TRUE)/sum(test$ca_03, na.rm = TRUE)
-  r <- c(r, rie)
+  mseRegressionTree = sqrt(mean((predictieRegressionTree - test[,"ca_03"])^2))
+  rieb <- sum(abs(predictieBoosting-test$ca_03), na.rm = TRUE)/sum(test$ca_03, na.rm = TRUE)
+  rief <- sum(abs(predictieRegressionTree-test$ca_03), na.rm = TRUE)/sum(test$ca_03, na.rm = TRUE)
+  
+  mseb <- c(mse, mseBoosting)
+  msef <- c(mse, mseRegressionTree)
+  rb <- c(rb, rieb)
+  rf <- c(rf, rief)
 }
 Sys.time() - t
+
+
+# eliminarea unitatilor ONG, PFA si Publice
+errorF <- subset(error, error$ca_03 >0)
+errorF = subset(errorF, den_tip != 'ONG' & den_tip != 'PFA' & 
+                 den_tip != 'PUB' & tip_un < 41)
+# eliminare unitatilor din clasele de marime 3 si 4
+errorF = subset(errorF, cls_marime == 1 | cls_marime == 2)
+# eliminarea unitatilor care nu au depus cifra de afaceri,
+# venitul brut si nr mediu de salariati
+errorF = subset(errorF, t_r3 == 1 & d_r3 == 1)
+
+train = sample(1:nrow(errorF), round(nrow(errorF)*0.1)) #train set
+test = errorF[-train,] #test set
+
+# 1. Regression tree
+#constructia arborelui de regresie in functie de venitul brut
+#si nr mediu de salariati
+regressionTree = tree(ca_01 ~ r7_t01 + r14_t01, errorF, subset=train) 
+predictieRegressionTree = predict(regressionTree, newdata = errorF[-train,])
+#root mean square error
+mseRegressionTree = sqrt(mean((predictieRegressionTree - test[,"ca_01"])^2))
+rezultate$regressionTrees[i]=mseRegressionTree
+
