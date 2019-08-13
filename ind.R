@@ -637,3 +637,76 @@ predictieRegressionTree = predict(regressionTree, newdata = errorF[-train,])
 mseRegressionTree = sqrt(mean((predictieRegressionTree - test[,"ca_01"])^2))
 rezultate$regressionTrees[i]=mseRegressionTree
 
+
+
+ratio_prev_year <- function (sursa1, sursa2) {
+  sursa1 <- clean(sursa1)
+  sursa1 <- remove_unit(sursa1)
+  sursa1 <- add_cls_marime(sursa1)
+  sursa1 <- subset(sursa1, !is.na(sursa1$t_r1) & !is.na(sursa1$t_r2) & !is.na(sursa1$t_r3) & 
+                    !is.na(sursa1$t_r4) & !is.na(sursa1$t_r5) & !is.na(sursa1$t_r6) & 
+                    !is.na(sursa1$t_r7) & !is.na(sursa1$t_r8) & !is.na(sursa1$t_r9) & 
+                    !is.na(sursa1$t_r10) & !is.na(sursa1$t_r11) & !is.na(sursa1$t_r12))
+  sursa1 <- add_div_caen(sursa1)
+  sursa1 <- subset(sursa1, !is.na(sursa1$div))
+  sursa1 <- subset(sursa1, !is.na(sursa1$cls_marime))
+  sursa1$div <- as.factor(sursa1$div)
+  sursa2 <- clean(sursa2)
+  sursa2 <- remove_unit(sursa2)
+  sursa2 <- add_cls_marime(sursa2)
+  sursa2 <- subset(sursa2, !is.na(sursa2$t_r1) & !is.na(sursa2$t_r2) & !is.na(sursa2$t_r3) & 
+                    !is.na(sursa2$t_r4) & !is.na(sursa2$t_r5) & !is.na(sursa2$t_r6) & 
+                    !is.na(sursa2$t_r7) & !is.na(sursa2$t_r8) & !is.na(sursa2$t_r9) & 
+                    !is.na(sursa2$t_r10) & !is.na(sursa2$t_r11) & !is.na(sursa2$t_r12))
+  sursa2 <- add_div_caen(sursa2)
+  sursa2 <- subset(sursa2, !is.na(sursa2$div))
+  sursa2 <- subset(sursa2, !is.na(sursa2$cls_marime))
+  sursa2$div <- as.factor(sursa2$div)
+  lv <- intersect(levels(sursa1$div),levels(sursa2$div))
+  cls <- 0
+  div <- 0
+  ratio <- 0
+  for (i in 1:4) {
+    for (j in lv) {
+      l1 <- length(sursa1[which(sursa1$cls_marime == i & sursa1$div == j), "ca_03"])
+      l2 <- length(sursa2[which(sursa2$cls_marime == i & sursa2$div == j), "ca_03"])
+      if (l1 == 0 | l2 == 0) next
+      cur <- sum(sursa1[which(sursa1$cls_marime == i & sursa1$div == j), "ca_03"], na.rm = TRUE)
+      prev <- sum(sursa2[which(sursa2$cls_marime == i & sursa2$div == j), "ca_02"], na.rm = TRUE)
+      ratio <- c(ratio, cur/prev)
+      div <- c(div, j)
+      cls <- c(cls, i)
+    }
+  }
+  df <- data.frame(cls, div, ratio)
+  df <- df[-c(1),]
+  return(df)
+}
+
+error7 <- out(sursa2017)
+error7 <- subset(error7, error7$Metoda2_3!=1)
+error7 <- error7[,c(1:179)]
+error7 <- calculeazaEroriUnitateDeMasura(error7,sursa2017)
+error7 <- subset(error7, error7$Metoda0_3!=1)
+error7 <- error7[,c(1:179)]
+error7 <- calculeazaMetodaComparatie(error7,sursa2017)
+error7 <- subset(error7, error7$Metoda3_3!=1)
+error7 <- error7[,c(1:179)]
+
+rprev <- ratio_prev_year(error, error7)
+
+# Ratio
+t = Sys.time()
+vr <- 0
+for (i in 1:3) {
+  # 2. Train
+  pos_train = sample(1:nrow(error), round(nrow(error)*0.1)) 
+  train = error[-pos_train,]
+  test = error[pos_train,]
+  rat <- ratio_prev_year(train, error7)
+  test1 <- left_join(test, rat, by = c("div"="div", "cls_marime" = "cls"))
+  test1$ratio <- test1$ca_02*test1$ratio
+  rie <- sum(abs(test1$ratio-test1$ca_03), na.rm = TRUE)/sum(test1$ca_03, na.rm = TRUE)
+  vr <- c(vr, rie)
+}
+Sys.time() - t
